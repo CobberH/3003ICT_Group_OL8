@@ -4,12 +4,13 @@ EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/project
 EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/projects/objects/backgrounds/protos/TexturedBackgroundLight.proto"
 EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/projects/objects/floors/protos/RectangleArena.proto"
 EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/projects/robots/gctronic/e-puck/protos/E-puck.proto"
+EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/projects/objects/solids/protos/SolidBox.proto"
 
 WorldInfo {
 }
 Viewpoint {
-  orientation -0.5773502691896257 0.5773502691896256 0.577350269189626 2.0944000000000007
-  position -0.0830468790341427 -0.002486682918811293 2.355098922481876
+  orientation -0.3952237825041747 0.39522500966733504 0.829213695905071 1.7569925893348024
+  position -0.015460807987965078 -1.2853903567470943 1.519733802083564
 }
 TexturedBackground {
 }
@@ -18,5 +19,21 @@ TexturedBackgroundLight {
 RectangleArena {
 }
 E-puck {
+  translation 0.026879998516312165 -1.2453473596288806e-06 -8.700758121485061e-05
+  rotation 5.150856708873769e-07 0.9999999999881207 -4.846960222717609e-06 0.0007562939943226838
   controller "AI_Controller"
+}
+Robot {
+  controller "Survivor"
+  supervisor TRUE
+}
+DEF Survivor SolidBox {
+  translation -0.01 0 0.19
+  name "Survivor"
+  size 0.05 0.05 0.2
+  appearance PBRAppearance {
+    baseColor 0.666667 0 1
+    roughness 0.5
+    metalness 0
+  }
 }
