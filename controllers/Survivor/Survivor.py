@@ -6,25 +6,32 @@ timestep = int(robot.getBasicTimeStep())
 
 print("Supervisor running")
 
-# Object must have DEF TARGET in the world
-target = robot.getFromDef("Survivor")
+positions = [
+    [0.5, 0.5, 0],
+    [-0.5, 0.5, 0],
+    [0.5, -0.5, 0],
+    [-0.5, -0.5, 0],
+    [0.75, 0.9, 0],
+    [-0.2, 0.9, 0],
+    [0.6, 0.5, 0],
+    [-0.8, -0.4, 0]
+    
+]
 
-if target is None:
-    print("ERROR: Could not find object with DEF TARGET")
-else:
-    translation = target.getField("translation")
+# Survivors
+survivor1 = robot.getFromDef("Survivor")
+survivor2 = robot.getFromDef("Survivor2")
+survivor3 = robot.getFromDef("Survivor3")
 
-    positions = [
-        [0.5, 0.5, 0.0],
-        [-0.5, 0.5, 0.0],
-        [0.5, -0.5, 0.0],
-        [-0.5, -0.5, 0.0]
-    ]
 
-    chosen_position = random.choice(positions)
-    translation.setSFVec3f(chosen_position)
+# random position
+random.shuffle(positions)
 
-    print("Moved TARGET to:", chosen_position)
+survivor1.getField("translation").setSFVec3f(positions[0])
+survivor2.getField("translation").setSFVec3f(positions[1])
+survivor3.getField("translation").setSFVec3f(positions[2])
+
+print("Survivors Worked?")
 
 while robot.step(timestep) != -1:
     pass
