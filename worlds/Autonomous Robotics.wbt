@@ -10,7 +10,7 @@ WorldInfo {
 }
 Viewpoint {
   orientation -0.21026011399379071 0.20790997735118036 0.9552822231053761 1.6277676309756888
-  position 0.0026272003948218797 -2.91719724647698 1.075019866202208
+  position 0.4763492150873753 -2.3391359596622 1.0907557884647514
 }
 TexturedBackground {
 }
@@ -54,6 +54,16 @@ DEF Survivor3 SolidBox {
   size 0.05 0.05 0.2
   appearance PBRAppearance {
     baseColor 0.666667 0 1
+    roughness 0.5
+    metalness 0
+  }
+}
+DEF Blue SolidBox {
+  translation 0.76 0 -0.04
+  name "Hazard blue"
+  size 0.5 0.5 0.25
+  appearance PBRAppearance {
+    baseColor 0 0 1
     roughness 0.5
     metalness 0
   }

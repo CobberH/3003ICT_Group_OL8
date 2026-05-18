@@ -45,6 +45,14 @@ print(f"Camera resolution: {W} x {H}")
 r = 0.0205
 L = 0.052
 
+# blue hazard recovery handling
+blue_reverse = 0
+blue_timer = 25
+blocked_turn_steps = 0
+BLOCKED_TURN_TIME = 15
+
+
+
 # Pose estimate
 x, y, theta = 0.0, 0.0, 0.0
 
@@ -70,6 +78,7 @@ hazards = set()
 red_hazards = []
 blue_hazards = []
 visit_counts = {}
+blocked_cells = set() # inaccessible terrain
 
 # Let encoders initialise
 robot.step(TIME_STEP)
@@ -210,7 +219,24 @@ def search(psValues):
         return -0.5 * MAX_SPEED, 0.5 * MAX_SPEED
     else:
         return 0.5 * MAX_SPEED, 0.5 * MAX_SPEED
+# grid mapping     
+def position_to_cell(x, y):
+    return (
+        round(x / GRID_SIZE),
+        round(y / GRID_SIZE)
+    )
+# water blocked area
+def block_hazard_area(blocked_cells, hazard_x, hazard_y, robot_x, robot_y, radius=1):
+    hx, hy = position_to_cell(hazard_x, hazard_y)
+    robot_cell = position_to_cell(robot_x, robot_y)
 
+    for dx in range(-radius, radius + 1):
+        for dy in range(-radius, radius + 1):
+            new_cell = (hx + dx, hy + dy)
+
+            # avoids blocking robot cell
+            if new_cell != robot_cell:
+                blocked_cells.add(new_cell)
 # Main loop
 while robot.step(TIME_STEP) != -1:
     # Read distance sensors
@@ -240,10 +266,7 @@ while robot.step(TIME_STEP) != -1:
 
     last_x, last_y = x, y
 
-    cell = (
-        round(x / GRID_SIZE),
-        round(y / GRID_SIZE)
-    )
+    cell = position_to_cell(x, y)
 
     if cell not in visit_counts:
         visit_counts[cell] = 0
@@ -264,11 +287,15 @@ while robot.step(TIME_STEP) != -1:
     right_red_obstacle = (psValues[0] > 80.0 or psValues[1] > 80.0 or psValues[2] > 80.0) and (red_detected)
 
     # Decide state
-    if stuck_counter > STUCK_LIMIT:
+    if state == "BLUE_ESCAPE" and blue_reverse > 0:
+        state = "BLUE_ESCAPE"
+    elif stuck_counter > STUCK_LIMIT:
         state = "RECOVERY"
+    elif left_blue_obstacle or right_blue_obstacle:
+        state = "BLUE_ESCAPE"
     elif target_found and not target_visible_last_step and len(targets_found) < TARGET_LIMIT:
         state = "TARGET_DETECTED"
-    elif left_obstacle or right_obstacle or left_blue_obstacle or right_blue_obstacle or left_red_obstacle or right_red_obstacle:
+    elif left_obstacle or right_obstacle or left_red_obstacle or right_red_obstacle:
         state = "SAFETY_NAV"
     elif len(targets_found) >= TARGET_LIMIT:
         state = "ALL FOUND"
@@ -294,26 +321,69 @@ while robot.step(TIME_STEP) != -1:
             else:
                 leftSpeed, rightSpeed = search(psValues)
 
+        #blue recovery
+        case "BLUE_ESCAPE":
+            blue_reverse += 1
+        
+            hazard_x, hazard_y = estimate_object_position(x, y, theta, distance=0.25)
+        
+            if is_new_detection(hazard_x, hazard_y, blue_hazards, min_dist=0.10):
+                blue_hazards.append((hazard_x, hazard_y))
+                hazards.add((hazard_x, hazard_y, "BLUE"))
+        
+                hazard_cell = position_to_cell(hazard_x, hazard_y)
+                block_hazard_area(blocked_cells, hazard_x, hazard_y, x, y, radius=1)
+        
+                print(f"BLUE HAZARD marked at x={hazard_x}, y={hazard_y}, cell={hazard_cell}")
+        
+            if blue_reverse < 10:
+                leftSpeed = -0.35 * MAX_SPEED
+                rightSpeed = -0.35 * MAX_SPEED
+        
+            elif blue_reverse < blue_timer:
+                leftSpeed = 0.35 * MAX_SPEED
+                rightSpeed = -0.35 * MAX_SPEED
+        
+            else:
+                blue_reverse = 0
+                search_turn_steps = 0
+                state = "SEARCH"
+                leftSpeed = 0.4 * MAX_SPEED
+                rightSpeed = 0.4 * MAX_SPEED
+            
         case "SAFETY_NAV":
             # immediate obstacle avoidance
             if left_blue_obstacle:
+                # Turn away from blue/water hazard
                 leftSpeed = 0.5 * MAX_SPEED
                 rightSpeed = -0.5 * MAX_SPEED
+
                 hazard_x, hazard_y = estimate_object_position(x, y, theta, distance=0.25)
 
                 if is_new_detection(hazard_x, hazard_y, blue_hazards, min_dist=0.10):
                     blue_hazards.append((hazard_x, hazard_y))
                     hazards.add((hazard_x, hazard_y, "BLUE"))
+
+                    hazard_cell = position_to_cell(hazard_x, hazard_y)
+                    block_hazard_area(blocked_cells, hazard_x, hazard_y, x, y, radius=1)
+
+                    print(f"BLUE HAZARD marked at x={hazard_x}, y={hazard_y}, cell={hazard_cell}")
 
             elif right_blue_obstacle:
+                # Turn away from blue/water hazard
                 leftSpeed = -0.5 * MAX_SPEED
                 rightSpeed = 0.5 * MAX_SPEED
+
                 hazard_x, hazard_y = estimate_object_position(x, y, theta, distance=0.25)
 
                 if is_new_detection(hazard_x, hazard_y, blue_hazards, min_dist=0.10):
                     blue_hazards.append((hazard_x, hazard_y))
                     hazards.add((hazard_x, hazard_y, "BLUE"))
-
+        
+                    hazard_cell = position_to_cell(hazard_x, hazard_y)
+                    block_hazard_area(blocked_cells, hazard_x, hazard_y, radius=1)
+        
+                    print(f"BLUE HAZARD marked at x={hazard_x}, y={hazard_y}, cell={hazard_cell}")
             elif left_red_obstacle:
                 leftSpeed = 0.5 * MAX_SPEED
                 rightSpeed = -0.5 * MAX_SPEED
