@@ -237,6 +237,53 @@ def block_hazard_area(blocked_cells, hazard_x, hazard_y, robot_x, robot_y, radiu
             # avoids blocking robot cell
             if new_cell != robot_cell:
                 blocked_cells.add(new_cell)
+                
+def print_discovered_map():
+    map_cells = set(visited) # collects all cell data
+
+    target_cells = set() #target cell local
+    for tx, ty in targets_found:
+        target_cells.add(position_to_cell(tx, ty))
+
+    hazard_cells = set() # hazard cell local
+    for hx, hy, colour in hazards:
+        hazard_cells.add(position_to_cell(hx, hy))
+
+    all_cells = map_cells | target_cells | hazard_cells
+
+    if not all_cells:
+        print("Map is empty")
+        return
+
+    min_x = min(c[0] for c in all_cells)
+    max_x = max(c[0] for c in all_cells)
+    min_y = min(c[1] for c in all_cells)
+    max_y = max(c[1] for c in all_cells)
+
+    print("\nDISCOVERED MAP")
+    print("O = explored, X = target, H = hazard")
+    print()
+
+    for gy in range(max_y, min_y - 1, -1):
+        row = ""
+
+        for gx in range(min_x, max_x + 1):
+            cell = (gx, gy)
+
+            if cell in target_cells: #target mark
+                row += " X "
+            elif cell in hazard_cells: #hazard mark
+                row += " H "
+            elif cell in map_cells: #normal cell mark
+                row += " O "
+            else:
+                row += " . " #undiscovered
+
+        print(row)
+
+    print()
+    
+    
 # Main loop
 while robot.step(TIME_STEP) != -1:
     # Read distance sensors
@@ -466,11 +513,14 @@ while robot.step(TIME_STEP) != -1:
                 print("MISSION COMPLETE: 3 targets found")
                 print(f"Targets: {targets_found}")
                 print(f"Hazards: {hazards}")
+                
+                print_discovered_map()
+                
                 all_targets_found = True
 
     grid_x = round(x, 1)
     grid_y = round(y, 1)
-    visited.add((grid_x, grid_y))
+    visited.add(cell)
 
     # Print pose every 10 steps
     step_count += 1
