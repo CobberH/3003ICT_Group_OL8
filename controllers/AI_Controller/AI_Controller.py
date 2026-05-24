@@ -93,15 +93,15 @@ REACQUIRE_TURN_SPEED = 0.2 * MAX_SPEED
 CENTER_TOLERANCE_RATIO = 0.12
 
 # Duplicate distances
-GREEN_DUPLICATE_DIST = 1.0
+GREEN_DUPLICATE_DIST = 0.5
 RED_DUPLICATE_DIST = 0.8
 BLUE_DUPLICATE_DIST = 0.8
 
 # Sensor threshold for confirming object location
 GREEN_CONFIRM_RATIO = 0.10
 GREEN_CONFIRM_THRESHOLD = 79.0
-RED_CONFIRM_THRESHOLD = 78.0
-BLUE_CONFIRM_THRESHOLD = 77.0
+RED_CONFIRM_THRESHOLD = 79.0
+BLUE_CONFIRM_THRESHOLD = 79.0
 
 # Stuck variables
 last_x, last_y = 0.0, 0.0
@@ -229,7 +229,7 @@ def detect_blue_object(camera, W, H):
             g = camera.imageGetGreen(image, W, x, y)
             b = camera.imageGetBlue(image, W, x, y)
 
-            if r < 80 and g < 80 and b > 120:
+            if b > 100 and b > r * 1.3 and b > g * 1.3:
                 blue_count += 1
 
             total_count += 1
@@ -498,7 +498,6 @@ while robot.step(TIME_STEP) != -1:
             if blue_close:
                 if is_new_detection(hazard_x, hazard_y, blue_hazards, min_dist=BLUE_DUPLICATE_DIST):
                     blue_hazards.append((hazard_x, hazard_y))
-                    hazards.add((hazard_x, hazard_y, "BLUE"))
                     block_hazard_area(blocked_cells, hazard_x, hazard_y, gps_x, gps_y, radius=1)
                     print(f"BLUE OBSTACLE marked at GPS_X = {hazard_x}, GPS_Y = {hazard_y}")
 
