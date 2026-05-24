@@ -65,8 +65,6 @@ step_count = 0
 targets_found = []
 TARGET_LIMIT = 3
 all_targets_found = False
-blue_detected = False
-red_detected = False
 
 # Mapping grid and search variables
 visited = set()
@@ -95,9 +93,9 @@ REACQUIRE_TURN_SPEED = 0.2 * MAX_SPEED
 CENTER_TOLERANCE_RATIO = 0.12
 
 # Duplicate distances
-GREEN_DUPLICATE_DIST = 0.45
-RED_DUPLICATE_DIST = 0.35
-BLUE_DUPLICATE_DIST = 0.35
+GREEN_DUPLICATE_DIST = 1.0
+RED_DUPLICATE_DIST = 0.8
+BLUE_DUPLICATE_DIST = 0.8
 
 # Sensor threshold for confirming object location
 GREEN_CONFIRM_RATIO = 0.10
@@ -108,12 +106,8 @@ BLUE_CONFIRM_THRESHOLD = 77.0
 # Stuck variables
 last_x, last_y = 0.0, 0.0
 stuck_counter = 0
-recovery_mode = None # None, "STUCK", "BLUE_ESCAPE"
+recovery_mode = None # None, "STUCK"
 recovery_step = 0
-SAFETY_ESCAPE_STEPS = 15
-safety_escape_counter = 0
-last_safety_leftSpeed = -2.0
-last_safety_rightSpeed = 2.0
 STUCK_LIMIT = 30
 OBSTACLE_THRESHOLD = 80.0
 
@@ -128,18 +122,12 @@ x_start = W // 3
 x_end = 2 * W // 3
 
 
-def update_odometry(x, y, theta, dL, dR, r, L, front_blocked, rear_blocked, leftSpeed, rightSpeed):
+def update_odometry(x, y, theta, dL, dR, r, L):
     dl = dL * r
     dr = dR * r
 
     dc = (dl + dr) / 2.0
     dtheta = (dr - dl) / L
-
-    # Prevent fake forward or reverse movement while blocked
-    if front_blocked and leftSpeed > 0 and rightSpeed > 0:
-        dc = 0.0
-    elif rear_blocked and leftSpeed < 0 and rightSpeed < 0:
-        dc = 0.0
 
     theta += dtheta
 
@@ -294,15 +282,27 @@ def is_front_close(pending_object, psValues):
     return False
 
 # Obstacle avoidance
-def obstacle_avoid(psValues, fwd=2.5, turn=2.0, threshold=80.0):
-    front_left = max(psValues[5], psValues[6], psValues[7])
-    front_right = max(psValues[0], psValues[1], psValues[2])
+def obstacle_avoid(psValues, fwd=2.0, turn=2.0, threshold=80.0):
+    front_left = max(psValues[6], psValues[7])
+    front_right = max(psValues[0], psValues[1])
 
-    if front_right > threshold:
+    left_side = psValues[5]
+    right_side = psValues[2]
+
+    if front_left > threshold and front_right > threshold:
         return -turn, turn
 
     elif front_left > threshold:
         return turn, -turn
+
+    elif front_right > threshold:
+        return -turn, turn
+
+    elif left_side > threshold:
+        return 0.8 * fwd, fwd
+
+    elif right_side > threshold:
+        return fwd, 0.8 * fwd
 
     return fwd, fwd
 
@@ -317,7 +317,7 @@ def print_discovered_map():
     for hx, hy, colour in hazards:
         hazard_cells.add(position_to_cell(hx, hy))
 
-    all_cells = map_cells | target_cells | hazard_cells
+    all_cells = map_cells | target_cells | hazard_cells | blocked_cells
 
     if not all_cells:
         print("Map is empty")
@@ -329,7 +329,7 @@ def print_discovered_map():
     max_y = max(c[1] for c in all_cells)
 
     print("\nDISCOVERED MAP")
-    print("O = explored, X = target, H = hazard")
+    print("O = explored, X = target, H = red hazard, B = blue obstacle")
     print()
 
     for gy in range(max_y, min_y - 1, -1):
@@ -342,6 +342,8 @@ def print_discovered_map():
                 row += " X "
             elif cell in hazard_cells: #hazard mark
                 row += " H "
+            elif cell in blocked_cells: #obstacle cell
+                row += " B "
             elif cell in map_cells: #normal cell mark
                 row += " O "
             else:
@@ -379,21 +381,23 @@ while robot.step(TIME_STEP) != -1:
 
     # check if directions are blocked
     front_blocked = psValues[0] > OBSTACLE_THRESHOLD or psValues[7] > OBSTACLE_THRESHOLD
-    left_blocked  = psValues[5] > OBSTACLE_THRESHOLD or psValues[6] > OBSTACLE_THRESHOLD
-    right_blocked = psValues[1] > OBSTACLE_THRESHOLD or psValues[2] > OBSTACLE_THRESHOLD
-    rear_blocked  = psValues[3] > OBSTACLE_THRESHOLD or psValues[4] > OBSTACLE_THRESHOLD
 
     # update robot odometry
-    x, y, theta = update_odometry(x, y, theta, dL, dR, r, L, front_blocked, rear_blocked, leftSpeed, rightSpeed)
+    x, y, theta = update_odometry(x, y, theta, dL, dR, r, L)
 
     # Stuck check
     movement = math.hypot(x - last_x, y - last_y)
 
-    # robot wheel motors are moving forward - true or false
-    forward = (dL + dR) / 2.0 > 0
+    # robot wheel motors are active
+    motors_active = abs(leftSpeed) > 0.1 or abs(rightSpeed) > 0.1
 
     # increase stuck counter to enter recovery state
-    if (movement < 0.001 and forward and state in ["SEARCH", "APPROACH_OBJECT"] and state != "ALL FOUND"):
+    if (
+        movement < 0.001 and
+        motors_active and
+        state in ["SEARCH", "APPROACH_OBJECT", "SAFETY_NAV"] and 
+        state != "ALL FOUND"
+    ):
         stuck_counter += 1
     else:
         stuck_counter = 0
@@ -416,20 +420,24 @@ while robot.step(TIME_STEP) != -1:
     # Detect obstacles
     left_obstacle = psValues[5] > 80.0 or psValues[6] > 80.0 or psValues[7] > 80.0
     right_obstacle = psValues[0] > 80.0 or psValues[1] > 80.0 or psValues[2] > 80.0
-    left_blue_obstacle = (psValues[5] > 80.0 or psValues[6] > 80.0 or psValues[7] > 80.0) and (blue_detected)
-    right_blue_obstacle = (psValues[0] > 80.0 or psValues[1] > 80.0 or psValues[2] > 80.0) and (blue_detected)
-    left_red_obstacle = (psValues[5] > 80.0 or psValues[6] > 80.0 or psValues[7] > 80.0) and (red_detected)
-    right_red_obstacle = (psValues[0] > 80.0 or psValues[1] > 80.0 or psValues[2] > 80.0) and (red_detected)
 
     # Memory of colour seen
     if target_found and len(targets_found) < TARGET_LIMIT and target_ignore_counter == 0:
         pending_object = "GREEN"
-        pending_seen_x = x
-        pending_seen_y = y
         pending_seen_theta = theta
 
     front_close = is_front_close(pending_object, psValues)
 
+    blue_close = (
+        blue_detected and
+        (psValues[0] > BLUE_CONFIRM_THRESHOLD or psValues[7] > BLUE_CONFIRM_THRESHOLD)
+    )
+    
+    red_close = (
+        red_detected and
+        (psValues[0] > RED_CONFIRM_THRESHOLD or psValues[7] > RED_CONFIRM_THRESHOLD)
+    )
+    
     # Make sure the main object on screen is green and robot is close enough to target
     close_pending_object = (pending_object == "GREEN" and front_close and target_found and green_ratio > GREEN_CONFIRM_RATIO and green_centered)
 
@@ -445,14 +453,10 @@ while robot.step(TIME_STEP) != -1:
         recovery_step = 0
         state = "RECOVERY"
 
-    elif left_blue_obstacle or right_blue_obstacle:
-        recovery_mode = "BLUE_ESCAPE"
-        state = "RECOVERY"
-
     elif close_pending_object:
         state = "APPROACH_OBJECT"
 
-    elif left_obstacle or right_obstacle or left_red_obstacle or right_red_obstacle:
+    elif left_obstacle or right_obstacle:
         state = "SAFETY_NAV"
 
     elif pending_object is not None:
@@ -491,14 +495,14 @@ while robot.step(TIME_STEP) != -1:
             hazard_y = round(gps_y, 2)
 
             # hazard logging
-            if blue_detected:
+            if blue_close:
                 if is_new_detection(hazard_x, hazard_y, blue_hazards, min_dist=BLUE_DUPLICATE_DIST):
                     blue_hazards.append((hazard_x, hazard_y))
                     hazards.add((hazard_x, hazard_y, "BLUE"))
                     block_hazard_area(blocked_cells, hazard_x, hazard_y, gps_x, gps_y, radius=1)
                     print(f"BLUE OBSTACLE marked at GPS_X = {hazard_x}, GPS_Y = {hazard_y}")
 
-            elif red_detected:
+            elif red_close:
                 if is_new_detection(hazard_x, hazard_y, red_hazards, min_dist=RED_DUPLICATE_DIST):
                     red_hazards.append((hazard_x, hazard_y))
                     hazards.add((hazard_x, hazard_y, "RED"))
@@ -506,94 +510,32 @@ while robot.step(TIME_STEP) != -1:
 
             avoid_left, avoid_right = obstacle_avoid(psValues)
 
-            if avoid_left != 2.5 or avoid_right != 2.5:
-                leftSpeed = avoid_left
-                rightSpeed = avoid_right
-
-                last_safety_leftSpeed = leftSpeed
-                last_safety_rightSpeed = rightSpeed
-                safety_escape_counter = SAFETY_ESCAPE_STEPS
-
-            elif safety_escape_counter > 0:
-                leftSpeed = last_safety_leftSpeed
-                rightSpeed = last_safety_rightSpeed
-                safety_escape_counter -= 1
-
-            else:
-                leftSpeed = 2.5
-                rightSpeed = 2.5
+            leftSpeed = avoid_left
+            rightSpeed = avoid_right
 
         case "RECOVERY":
-
-            if recovery_mode == "BLUE_ESCAPE":
+            if recovery_mode == "STUCK":
                 recovery_step += 1
 
-                hazard_x = round(gps_x, 2)
-                hazard_y = round(gps_y, 2)
-
-                if is_new_detection(hazard_x, hazard_y, blue_hazards, min_dist=BLUE_DUPLICATE_DIST):
-                    blue_hazards.append((hazard_x, hazard_y))
-                    hazards.add((hazard_x, hazard_y, "BLUE"))
-                    block_hazard_area(blocked_cells, hazard_x, hazard_y, gps_x, gps_y, radius=1)
-
-                    print(f"BLUE OBSTACLE marked at GPS_X = {hazard_x}, GPS_Y = {hazard_y}")
-                
                 if recovery_step < 10:
+                    # do nothing
+                    leftSpeed = 0.0
+                    rightSpeed = 0.0
+
+                elif recovery_step < 35:
                     # reverse
                     leftSpeed = -0.35 * MAX_SPEED
                     rightSpeed = -0.35 * MAX_SPEED
 
-                elif recovery_step < 45:
-                    # turn away for longer
-                    leftSpeed = 0.45 * MAX_SPEED
-                    rightSpeed = -0.45 * MAX_SPEED
-
                 elif recovery_step < 70:
-                    # drive forward after turning
-                    leftSpeed = 0.35 * MAX_SPEED
-                    rightSpeed = 0.35 * MAX_SPEED
-                else:
-                    recovery_step = 0
-                    recovery_mode = None
-                    state = "SEARCH"
-                    leftSpeed = 0.4 * MAX_SPEED
-                    rightSpeed = 0.4 * MAX_SPEED
-                    if pending_object == "BLUE":
-                        pending_object = None
-                        approach_lost_counter = 0
-
-            # if robot stuck, determine how it is stuck on what sides and steps to get out
-            elif recovery_mode == "STUCK":
-                recovery_step += 1
-
-                if recovery_step < 5:
-                    leftSpeed = 0.0
-                    rightSpeed = 0.0
-
-                elif front_blocked and not rear_blocked:
-                    # back away if front is blocked
-                    leftSpeed = -0.35 * MAX_SPEED
-                    rightSpeed = -0.35 * MAX_SPEED
-
-                elif left_blocked and not right_blocked:
-                    # turn right away from left obstacle
+                    # turn
                     leftSpeed = 0.35 * MAX_SPEED
                     rightSpeed = -0.35 * MAX_SPEED
 
-                elif right_blocked and not left_blocked:
-                    # turn left away from right obstacle
-                    leftSpeed = -0.35 * MAX_SPEED
+                elif recovery_step < 95:
+                    # move forward
+                    leftSpeed = 0.35 * MAX_SPEED
                     rightSpeed = 0.35 * MAX_SPEED
-
-                elif recovery_step < 30:
-                    # default reverse
-                    leftSpeed = -0.3 * MAX_SPEED
-                    rightSpeed = -0.3 * MAX_SPEED
-
-                elif recovery_step < 55:
-                    # default turn
-                    leftSpeed = 0.3 * MAX_SPEED
-                    rightSpeed = -0.3 * MAX_SPEED
 
                 else:
                     recovery_step = 0
@@ -602,13 +544,6 @@ while robot.step(TIME_STEP) != -1:
                     state = "SEARCH"
                     leftSpeed = 0.3 * MAX_SPEED
                     rightSpeed = 0.3 * MAX_SPEED
-
-            else:
-                recovery_mode = None
-                recovery_step = 0
-                state = "SEARCH"
-                leftSpeed = 0.0
-                rightSpeed = 0.0
 
         case "APPROACH_OBJECT":
             front_close = is_front_close(pending_object, psValues)
@@ -714,6 +649,8 @@ while robot.step(TIME_STEP) != -1:
                 print("MISSION COMPLETE: 3 targets found")
                 print(f"Targets: {targets_found}")
                 print(f"Hazards: {hazards}")
+                print(f"Blue obstacles: {blue_hazards}")
+                print(f"Blocked cells: {blocked_cells}")
                 
                 print_discovered_map()
 
@@ -729,7 +666,10 @@ while robot.step(TIME_STEP) != -1:
             f"state={state}, X = {x:.2f}, Y = {y:.2f}, "
             f"theta={math.degrees(theta):.1f}, "
             f"GPS_X = {gps_x:.2f}, GPS_Y = {gps_y:.2f}, "
-            f"visited = {len(visited)}, hazards = {len(hazards)}, "
+            f"visited = {len(visited)}, "
+            f"hazards = {len(hazards)}, "
+            f"obstacles = {len(blue_hazards)}, "
+            f"blocked_cells = {len(blocked_cells)}, "
             f"targets = {len(targets_found)}"
         )
 
