@@ -41,6 +41,11 @@ W = camera.getWidth()
 H = camera.getHeight()
 print(f"Camera resolution: {W} x {H}")
 
+# --- GPS ---
+gps = robot.getDevice('gps')
+gps.enable(TIME_STEP)
+print("GPS enabled")
+
 # Robot geometry
 r = 0.0205
 L = 0.052
@@ -358,6 +363,12 @@ while robot.step(TIME_STEP) != -1:
     for i in range(8):
         psValues.append(ps[i].getValue())
 
+    # Read GPS position
+    gps_values = gps.getValues()
+    gps_x = gps_values[0]
+    gps_y = gps_values[1]
+    gps_z = gps_values[2]
+
     # Odometry update
     curL = leftEnc.getValue()
     curR = rightEnc.getValue()
@@ -395,7 +406,7 @@ while robot.step(TIME_STEP) != -1:
     # update on whether robot has visited the area
     last_x, last_y = x, y
 
-    cell = position_to_cell(x, y)
+    cell = position_to_cell(gps_x, gps_y)
 
     if cell not in visit_counts:
         visit_counts[cell] = 0
@@ -481,22 +492,22 @@ while robot.step(TIME_STEP) != -1:
                 leftSpeed, rightSpeed = search(psValues)
            
         case "SAFETY_NAV":
-            hazard_x = round(x, 2)
-            hazard_y = round(y, 2)
+            hazard_x = round(gps_x, 2)
+            hazard_y = round(gps_y, 2)
 
             # hazard logging
             if blue_detected:
                 if is_new_detection(hazard_x, hazard_y, blue_hazards, min_dist=BLUE_DUPLICATE_DIST):
                     blue_hazards.append((hazard_x, hazard_y))
                     hazards.add((hazard_x, hazard_y, "BLUE"))
-                    block_hazard_area(blocked_cells, hazard_x, hazard_y, x, y, radius=1)
-                    print(f"BLUE HAZARD marked at x={hazard_x}, y={hazard_y}")
+                    block_hazard_area(blocked_cells, hazard_x, hazard_y, gps_x, gps_y, radius=1)
+                    print(f"BLUE OBSTACLE marked at GPS_X = {hazard_x}, GPS_Y = {hazard_y}")
 
             elif red_detected:
                 if is_new_detection(hazard_x, hazard_y, red_hazards, min_dist=RED_DUPLICATE_DIST):
                     red_hazards.append((hazard_x, hazard_y))
                     hazards.add((hazard_x, hazard_y, "RED"))
-                    print(f"RED HAZARD marked at x={hazard_x}, y={hazard_y}")
+                    print(f"RED HAZARD marked at GPS_X = {hazard_x}, GPS_Y = {hazard_y}")
 
             avoid_left, avoid_right = obstacle_avoid(psValues)
 
@@ -522,15 +533,15 @@ while robot.step(TIME_STEP) != -1:
             if recovery_mode == "BLUE_ESCAPE":
                 recovery_step += 1
 
-                hazard_x = round(x, 2)
-                hazard_y = round(y, 2)
+                hazard_x = round(gps_x, 2)
+                hazard_y = round(gps_y, 2)
 
                 if is_new_detection(hazard_x, hazard_y, blue_hazards, min_dist=BLUE_DUPLICATE_DIST):
                     blue_hazards.append((hazard_x, hazard_y))
                     hazards.add((hazard_x, hazard_y, "BLUE"))
-                    block_hazard_area(blocked_cells, hazard_x, hazard_y, x, y, radius=1)
+                    block_hazard_area(blocked_cells, hazard_x, hazard_y, gps_x, gps_y, radius=1)
 
-                    print(f"BLUE HAZARD marked at x={hazard_x}, y={hazard_y}")
+                    print(f"BLUE OBSTACLE marked at GPS_X = {hazard_x}, GPS_Y = {hazard_y}")
 
                 if recovery_step < 10:
                     leftSpeed = -0.35 * MAX_SPEED
@@ -613,8 +624,8 @@ while robot.step(TIME_STEP) != -1:
                 # Seeing if all green checks are present to be determined "green target"
                 # Checks if it is 1. close by sensors 2. green dominate 3. green centred
                 if (front_close and green_ratio > GREEN_CONFIRM_RATIO and green_centered):
-                    obj_x = round(x, 2)
-                    obj_y = round(y, 2)
+                    obj_x = round(gps_x, 2)
+                    obj_y = round(gps_y, 2)
 
                     leftSpeed = 0.0
                     rightSpeed = 0.0
@@ -626,7 +637,7 @@ while robot.step(TIME_STEP) != -1:
                         target_ignore_counter = TARGET_IGNORE_TIME
                         search_turn_steps = SEARCH_TURN_TIME
 
-                        print(f"TARGET {len(targets_found)} FOUND at x={obj_x}, y={obj_y}")
+                        print(f"TARGET {len(targets_found)} FOUND at GPS X = {obj_x}, Y ={obj_y}")
 
                     # Ignore green target if found before
                     else:
@@ -712,18 +723,19 @@ while robot.step(TIME_STEP) != -1:
                 all_targets_found = True
 
     # update cell visisted
-    grid_x = round(x, 1)
-    grid_y = round(y, 1)
-    visited.add(position_to_cell(x, y))
+    grid_x = round(gps_x, 1)
+    grid_y = round(gps_y, 1)
+    visited.add(position_to_cell(gps_x, gps_y))
 
     # Print pose every 10 steps
     step_count += 1
     if step_count % 10 == 0:
         print(
-            f"state={state}, x={x:.2f}, y={y:.2f}, "
+            f"state={state}, X = {x:.2f}, Y = {y:.2f}, "
             f"theta={math.degrees(theta):.1f}, "
-            f"visited={len(visited)}, hazards={len(hazards)}, "
-            f"targets={len(targets_found)}"
+            f"GPS_X = {gps_x:.2f}, GPS_Y = {gps_y:.2f}, "
+            f"visited = {len(visited)}, hazards = {len(hazards)}, "
+            f"targets = {len(targets_found)}"
         )
 
     # Apply motor speeds
