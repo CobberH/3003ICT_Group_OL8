@@ -6,6 +6,6 @@ maximizedDockId: -1
 centralWidgetVisible: 1
 renderingMode: PLAIN
 orthographicViewHeight: 1
-textFiles: 1 "controllers/Survivor/Survivor.py" "controllers/AI_Controller/AI_Controller.py"
+textFiles: 1 "controllers/AI_Controller/AI_Controller.py" "controllers/Survivor/Survivor.py"
 consoles: Console:All:All
 renderingDevicePerspectives: e-puck:camera;1;0.820513;0;0
