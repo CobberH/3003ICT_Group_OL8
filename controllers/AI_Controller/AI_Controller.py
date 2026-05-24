@@ -83,24 +83,21 @@ prevR = rightEnc.getValue()
 
 # Object approach and memory
 pending_object = None        # None, "GREEN", "RED", "BLUE"
-pending_seen_x = 0.0
-pending_seen_y = 0.0
 pending_seen_theta = 0.0
 
 # Approach parameters
 approach_lost_counter = 0
 APPROACH_SPEED = 0.25 * MAX_SPEED
 APPROACH_LOST_LIMIT = 30
-REACQUIRE_TURN_SPEED = 0.2 * MAX_SPEED
-CENTER_TOLERANCE_RATIO = 0.12
-GREEN_TURN_GAIN = 0.04
-
-# Duplicate distances
-GREEN_DUPLICATE_DIST = 0.55
-RED_DUPLICATE_DIST = 0.35
-BLUE_DUPLICATE_DIST = 0.35
 target_ignore_counter = 0
 TARGET_IGNORE_TIME = 100
+REACQUIRE_TURN_SPEED = 0.2 * MAX_SPEED
+CENTER_TOLERANCE_RATIO = 0.12
+
+# Duplicate distances
+GREEN_DUPLICATE_DIST = 0.45
+RED_DUPLICATE_DIST = 0.35
+BLUE_DUPLICATE_DIST = 0.35
 
 # Sensor threshold for confirming object location
 GREEN_CONFIRM_RATIO = 0.10
@@ -113,13 +110,10 @@ last_x, last_y = 0.0, 0.0
 stuck_counter = 0
 recovery_mode = None # None, "STUCK", "BLUE_ESCAPE"
 recovery_step = 0
-safety_step = 0
 SAFETY_ESCAPE_STEPS = 15
 safety_escape_counter = 0
 last_safety_leftSpeed = -2.0
 last_safety_rightSpeed = 2.0
-SAFETY_REVERSE_TIME = 10
-SAFETY_TURN_TIME = 25
 STUCK_LIMIT = 30
 OBSTACLE_THRESHOLD = 80.0
 
@@ -379,17 +373,17 @@ while robot.step(TIME_STEP) != -1:
     prevL = curL
     prevR = curR
 
+    if target_ignore_counter > 0:
+        target_ignore_counter -= 1
+
     # check if directions are blocked
     front_blocked = psValues[0] > OBSTACLE_THRESHOLD or psValues[7] > OBSTACLE_THRESHOLD
     left_blocked  = psValues[5] > OBSTACLE_THRESHOLD or psValues[6] > OBSTACLE_THRESHOLD
     right_blocked = psValues[1] > OBSTACLE_THRESHOLD or psValues[2] > OBSTACLE_THRESHOLD
     rear_blocked  = psValues[3] > OBSTACLE_THRESHOLD or psValues[4] > OBSTACLE_THRESHOLD
 
-    # update robot position
+    # update robot odometry
     x, y, theta = update_odometry(x, y, theta, dL, dR, r, L, front_blocked, rear_blocked, leftSpeed, rightSpeed)
-
-    if target_ignore_counter > 0:
-        target_ignore_counter -= 1
 
     # Stuck check
     movement = math.hypot(x - last_x, y - last_y)
@@ -542,19 +536,21 @@ while robot.step(TIME_STEP) != -1:
                     block_hazard_area(blocked_cells, hazard_x, hazard_y, gps_x, gps_y, radius=1)
 
                     print(f"BLUE OBSTACLE marked at GPS_X = {hazard_x}, GPS_Y = {hazard_y}")
-
+                
                 if recovery_step < 10:
+                    # reverse
                     leftSpeed = -0.35 * MAX_SPEED
                     rightSpeed = -0.35 * MAX_SPEED
 
-                elif recovery_step < 30:
-                    leftSpeed = -0.5 * MAX_SPEED
-                    rightSpeed = -0.5 * MAX_SPEED
+                elif recovery_step < 45:
+                    # turn away for longer
+                    leftSpeed = 0.45 * MAX_SPEED
+                    rightSpeed = -0.45 * MAX_SPEED
 
                 elif recovery_step < 70:
-                    leftSpeed = 0.5 * MAX_SPEED
-                    rightSpeed = -0.5 * MAX_SPEED
-
+                    # drive forward after turning
+                    leftSpeed = 0.35 * MAX_SPEED
+                    rightSpeed = 0.35 * MAX_SPEED
                 else:
                     recovery_step = 0
                     recovery_mode = None
@@ -723,8 +719,6 @@ while robot.step(TIME_STEP) != -1:
                 all_targets_found = True
 
     # update cell visisted
-    grid_x = round(gps_x, 1)
-    grid_y = round(gps_y, 1)
     visited.add(position_to_cell(gps_x, gps_y))
 
     # Print pose every 10 steps
