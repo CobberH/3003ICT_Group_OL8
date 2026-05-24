@@ -317,7 +317,7 @@ def print_discovered_map():
     for hx, hy, colour in hazards:
         hazard_cells.add(position_to_cell(hx, hy))
 
-    all_cells = map_cells | target_cells | hazard_cells
+    all_cells = map_cells | target_cells | hazard_cells | blocked_cells
 
     if not all_cells:
         print("Map is empty")
@@ -329,7 +329,7 @@ def print_discovered_map():
     max_y = max(c[1] for c in all_cells)
 
     print("\nDISCOVERED MAP")
-    print("O = explored, X = target, H = hazard")
+    print("O = explored, X = target, H = red hazard, B = blue obstacle")
     print()
 
     for gy in range(max_y, min_y - 1, -1):
@@ -342,6 +342,8 @@ def print_discovered_map():
                 row += " X "
             elif cell in hazard_cells: #hazard mark
                 row += " H "
+            elif cell in blocked_cells: #obstacle cell
+                row += " B "
             elif cell in map_cells: #normal cell mark
                 row += " O "
             else:
@@ -393,7 +395,12 @@ while robot.step(TIME_STEP) != -1:
     forward = (dL + dR) / 2.0 > 0
 
     # increase stuck counter to enter recovery state
-    if (movement < 0.001 and forward and state in ["SEARCH", "APPROACH_OBJECT"] and state != "ALL FOUND"):
+    if (
+        movement < 0.001 and
+        forward and
+        state in ["SEARCH", "APPROACH_OBJECT", "SAFETY_NAV"] and 
+        state != "ALL FOUND"
+    ):
         stuck_counter += 1
     else:
         stuck_counter = 0
@@ -430,6 +437,16 @@ while robot.step(TIME_STEP) != -1:
 
     front_close = is_front_close(pending_object, psValues)
 
+    blue_close = (
+        blue_detected and
+        (psValues[0] > BLUE_CONFIRM_THRESHOLD or psValues[7] > BLUE_CONFIRM_THRESHOLD)
+    )
+    
+    red_close = (
+        red_detected and
+        (psValues[0] > RED_CONFIRM_THRESHOLD or psValues[7] > RED_CONFIRM_THRESHOLD)
+    )
+    
     # Make sure the main object on screen is green and robot is close enough to target
     close_pending_object = (pending_object == "GREEN" and front_close and target_found and green_ratio > GREEN_CONFIRM_RATIO and green_centered)
 
@@ -491,14 +508,13 @@ while robot.step(TIME_STEP) != -1:
             hazard_y = round(gps_y, 2)
 
             # hazard logging
-            if blue_detected:
+            if blue_close:
                 if is_new_detection(hazard_x, hazard_y, blue_hazards, min_dist=BLUE_DUPLICATE_DIST):
                     blue_hazards.append((hazard_x, hazard_y))
-                    hazards.add((hazard_x, hazard_y, "BLUE"))
                     block_hazard_area(blocked_cells, hazard_x, hazard_y, gps_x, gps_y, radius=1)
                     print(f"BLUE OBSTACLE marked at GPS_X = {hazard_x}, GPS_Y = {hazard_y}")
 
-            elif red_detected:
+            elif red_close:
                 if is_new_detection(hazard_x, hazard_y, red_hazards, min_dist=RED_DUPLICATE_DIST):
                     red_hazards.append((hazard_x, hazard_y))
                     hazards.add((hazard_x, hazard_y, "RED"))
@@ -531,9 +547,8 @@ while robot.step(TIME_STEP) != -1:
                 hazard_x = round(gps_x, 2)
                 hazard_y = round(gps_y, 2)
 
-                if is_new_detection(hazard_x, hazard_y, blue_hazards, min_dist=BLUE_DUPLICATE_DIST):
+                if blue_close and is_new_detection(hazard_x, hazard_y, blue_hazards, min_dist=BLUE_DUPLICATE_DIST):
                     blue_hazards.append((hazard_x, hazard_y))
-                    hazards.add((hazard_x, hazard_y, "BLUE"))
                     block_hazard_area(blocked_cells, hazard_x, hazard_y, gps_x, gps_y, radius=1)
 
                     print(f"BLUE OBSTACLE marked at GPS_X = {hazard_x}, GPS_Y = {hazard_y}")
@@ -714,6 +729,8 @@ while robot.step(TIME_STEP) != -1:
                 print("MISSION COMPLETE: 3 targets found")
                 print(f"Targets: {targets_found}")
                 print(f"Hazards: {hazards}")
+                print(f"Blue obstacles: {blue_hazards}")
+                print(f"Blocked cells: {blocked_cells}")
                 
                 print_discovered_map()
 
@@ -729,7 +746,10 @@ while robot.step(TIME_STEP) != -1:
             f"state={state}, X = {x:.2f}, Y = {y:.2f}, "
             f"theta={math.degrees(theta):.1f}, "
             f"GPS_X = {gps_x:.2f}, GPS_Y = {gps_y:.2f}, "
-            f"visited = {len(visited)}, hazards = {len(hazards)}, "
+            f"visited = {len(visited)}, "
+            f"hazards = {len(hazards)}, "
+            f"obstacles = {len(blue_hazards)}, "
+            f"blocked_cells = {len(blocked_cells)}, "
             f"targets = {len(targets_found)}"
         )
 
