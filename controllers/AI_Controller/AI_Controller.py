@@ -207,8 +207,9 @@ def analyse_green_object(camera, W, H):
             r = camera.imageGetRed(image, W, x, y)
             g = camera.imageGetGreen(image, W, x, y)
             b = camera.imageGetBlue(image, W, x, y)
-
-            if g > 90 and g > r * 1.2 and g > b * 1.2:
+            brightness = r + g + b
+            
+            if brightness > 60 and g > r * 1.15 and g > b * 1.15:
                 green_count += 1
                 green_x_sum += x
 

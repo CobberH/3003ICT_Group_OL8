@@ -9,8 +9,8 @@ EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/project
 WorldInfo {
 }
 Viewpoint {
-  orientation -0.23019045985207653 0.22535214249036462 0.946693595662341 1.646758075201492
-  position 0.10272894074918226 -2.3655372509253407 1.3615336045127633
+  orientation -0.342802045870172 0.3343388385462844 0.8778976582647582 1.7254084140716262
+  position 0.02862441538238769 -1.7559138230410916 1.5010920353875095
 }
 TexturedBackground {
 }
@@ -19,9 +19,13 @@ TexturedBackgroundLight {
 RectangleArena {
 }
 E-puck {
-  translation 0.026879998516312165 -1.2453473596288806e-06 -8.700758121485061e-05
+  translation -0.36312 -1.24383e-06 0.000207947
   rotation 5.150856708873769e-07 0.9999999999881207 -4.846960222717609e-06 0.0007562939943226838
   controller "AI_Controller"
+  turretSlot [
+    GPS {
+    }
+  ]
 }
 Robot {
   controller "Survivor"
@@ -63,6 +67,15 @@ DEF Blue SolidBox {
   size 0.5 0.5 0.25
   appearance PBRAppearance {
     baseColor 0 0 1
+    roughness 0.5
+    metalness 0
+  }
+}
+SolidBox {
+  translation -0.42 0.45 0
+  size 0.1 0.1 0.1
+  appearance PBRAppearance {
+    baseColor 1 0 0
     roughness 0.5
     metalness 0
   }
